@@ -1,8 +1,8 @@
 # ----------------------------
 # Auto Scaling Group
 # ----------------------------
-resource "aws_autoscaling_group" "petcart_asg" {
-  name = "petcart-asg"
+resource "aws_autoscaling_group" "weblancehub_asg" {
+  name = "weblancehub-asg"
 
   min_size         = 1
   desired_capacity = 1
@@ -14,17 +14,17 @@ resource "aws_autoscaling_group" "petcart_asg" {
   health_check_grace_period = 300
 
   target_group_arns = [
-    aws_lb_target_group.petcart_tg.arn
+    aws_lb_target_group.weblancehub_tg.arn
   ]
 
   launch_template {
-    id      = aws_launch_template.petcart_lt.id
+    id      = aws_launch_template.weblancehub_lt.id
     version = "$Latest"
   }
 
   tag {
     key                 = "Name"
-    value               = "petcart-asg-instance"
+    value               = "weblancehub-asg-instance"
     propagate_at_launch = true
   }
 
@@ -32,4 +32,3 @@ resource "aws_autoscaling_group" "petcart_asg" {
     create_before_destroy = true
   }
 }
-
