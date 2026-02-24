@@ -1,9 +1,9 @@
 terraform {
   backend "s3" {
-    bucket         = "petcart-terraform-state-867809929056"
-    key            = "petcart/frontend/terraform.tfstate"
+    bucket         = "weblancehub-terraform-state-867809929056"
+    key            = "weblancehub/frontend/terraform.tfstate"
     region         = "us-east-1"
-    dynamodb_table = "petcart-terraform-locks"
+    dynamodb_table = "weblancehub-terraform-locks"
     encrypt        = true
   }
 }
