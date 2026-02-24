@@ -2,7 +2,7 @@
 # Security Group for ALB
 # ----------------------------
 resource "aws_security_group" "alb_sg" {
-  name        = "petcart-alb-sg"
+  name        = "weblancehub-alb-sg"
   description = "Allow HTTP traffic to ALB"
   vpc_id      = data.aws_vpc.default.id
 
@@ -21,30 +21,30 @@ resource "aws_security_group" "alb_sg" {
   }
 
   tags = {
-    Name = "petcart-alb-sg"
+    Name = "weblancehub-alb-sg"
   }
 }
 
 # ----------------------------
 # Application Load Balancer
 # ----------------------------
-resource "aws_lb" "petcart_alb" {
-  name               = "petcart-alb"
+resource "aws_lb" "weblancehub_alb" {
+  name               = "weblancehub-alb"
   load_balancer_type = "application"
   internal           = false
   security_groups    = [aws_security_group.alb_sg.id]
   subnets            = data.aws_subnets.public.ids
 
   tags = {
-    Name = "petcart-alb"
+    Name = "weblancehub-alb"
   }
 }
 
 # ----------------------------
 # Target Group
 # ----------------------------
-resource "aws_lb_target_group" "petcart_tg" {
-  name     = "petcart-tg"
+resource "aws_lb_target_group" "weblancehub_tg" {
+  name     = "weblancehub-tg"
   port     = 80
   protocol = "HTTP"
   vpc_id   = data.aws_vpc.default.id
@@ -60,7 +60,7 @@ resource "aws_lb_target_group" "petcart_tg" {
   }
 
   tags = {
-    Name = "petcart-tg"
+    Name = "weblancehub-tg"
   }
 }
 
@@ -68,13 +68,12 @@ resource "aws_lb_target_group" "petcart_tg" {
 # ALB Listener (HTTP)
 # ----------------------------
 resource "aws_lb_listener" "http" {
-  load_balancer_arn = aws_lb.petcart_alb.arn
+  load_balancer_arn = aws_lb.weblancehub_alb.arn
   port              = 80
   protocol          = "HTTP"
 
   default_action {
     type             = "forward"
-    target_group_arn = aws_lb_target_group.petcart_tg.arn
+    target_group_arn = aws_lb_target_group.weblancehub_tg.arn
   }
 }
-
