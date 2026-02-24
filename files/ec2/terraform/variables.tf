@@ -10,7 +10,7 @@ variable "region" {
 variable "project_name" {
   description = "Project name prefix"
   type        = string
-  default     = "petcart"
+  default     = "weblancehub"
 }
 
 # ----------------------------
@@ -54,4 +54,3 @@ variable "cpu_scale_in_threshold" {
   type        = number
   default     = 30
 }
-
