@@ -1,0 +1,31 @@
+apiVersion: eksctl.io/v1alpha5
+kind: ClusterConfig
+
+metadata:
+  name: petcart-eks
+  region: us-east-1
+
+iam:
+  withOIDC: true
+
+cloudWatch:
+  clusterLogging:
+    enableTypes:
+      - api
+      - audit
+      - authenticator
+      - controllerManager
+      - scheduler
+
+fargateProfiles:
+  - name: default
+    selectors:
+      - namespace: default
+
+  - name: kube-system
+    selectors:
+      - namespace: kube-system
+
+  - name: petcart
+    selectors:
+      - namespace: petcart

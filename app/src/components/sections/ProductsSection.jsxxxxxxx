@@ -1,0 +1,1115 @@
+/*
+  ProductsSection_split_sections.jsx
+  ----------------------------------
+  Your original file split into clear sections with short comments.
+
+  IMPORTANT: I did NOT change any logic — only added section headers, a
+  top-level table of contents and small explanatory comments so you can
+  find and edit the behaviour (eg. suggestions) easily.
+
+  TOC / Sections:
+  1) Imports & Mock Data
+  2) Helpers
+  3) UI Utilities (Toast, RichBar)
+  4) Main Component (ProductsSection)
+  5) Modal Shell (CenteredModal)
+  6) Sub-Forms (AddForm, EditForm, RemoveForm)
+
+  If you want these split into multiple physical files (AddForm.jsx, EditForm.jsx, ...)
+  tell me and I will split them and wire up exports/imports.
+*/
+
+/* ==========================
+   1) Imports & Mock Data
+   - React imports
+   - MOCK_PRODUCTS, PET_TYPES, CATEGORIES
+   ========================== */
+import React, { useMemo, useRef, useState } from "react";
+
+/** ------------------------------
+ * Mock Products (5 items)
+ * ------------------------------ */
+const MOCK_PRODUCTS = [
+  {
+    id: "P001",
+    name: "Dog Food Premium",
+    brand: "PetCare",
+    price: 500,
+    discount: 10,
+    shortDesc: "Nutritious dog food for daily health.",
+    detailedDesc:
+      "This is **bold text example**. You can highlight important parts using bold.",
+    stock: 15,
+    addedDate: "2025-08-15",
+    banner: "/images/dogfood-banner.jpg",
+    images: ["/images/dogfood-side1.jpg", "/images/dogfood-side2.jpg"],
+    petType: "Dogs",
+    category: "Food",
+  },
+  {
+    id: "P002",
+    name: "Cat Toy Mouse",
+    brand: "CatFun",
+    price: 200,
+    discount: 0,
+    shortDesc: "Interactive plush mouse that squeaks on touch.",
+    detailedDesc: "Playtime toy for cats. **Durable** and safe.",
+    stock: 50,
+    addedDate: "2025-08-18",
+    banner: "/images/cattoy-banner.jpg",
+    images: ["/images/cattoy-1.jpg"],
+    petType: "Cats",
+    category: "Toys & Entertainment",
+  },
+  {
+    id: "P003",
+    name: "Bird Cage XL",
+    brand: "FeatherHome",
+    price: 1500,
+    discount: 5,
+    shortDesc: "Spacious, easy-clean cage with accessories.",
+    detailedDesc: "**Large cage** suitable for parakeets & cockatiels.",
+    stock: 5,
+    addedDate: "2025-08-20",
+    banner: "/images/birdcage-banner.jpg",
+    images: ["/images/birdcage-acc.jpg"],
+    petType: "Birds",
+    category: "Homes & Beds",
+  },
+  {
+    id: "P004",
+    name: "AquaCare Fish Medicine",
+    brand: "AquaPlus",
+    price: 300,
+    discount: 15,
+    shortDesc: "Treats common infections in freshwater fish.",
+    detailedDesc: "Use for **fin rot**, ick, and mild infections.",
+    stock: 25,
+    addedDate: "2025-08-22",
+    banner: "/images/fishmed-banner.jpg",
+    images: [],
+    petType: "Fishes",
+    category: "Health & Medicine",
+  },
+  {
+    id: "P005",
+    name: "Dog Grooming Kit",
+    brand: "GroomPro",
+    price: 800,
+    discount: 20,
+    shortDesc: "Brush, shampoo, nail cutter — all in one kit.",
+    detailedDesc: "Includes **brush**, shampoo and nail trimmer.",
+    stock: 10,
+    addedDate: "2025-08-25",
+    banner: "/images/doggroom-banner.jpg",
+    images: ["/images/doggroom-1.jpg", "/images/doggroom-2.jpg"],
+    petType: "Dogs",
+    category: "Grooming",
+  },
+];
+
+const PET_TYPES = ["Dogs", "Cats", "Fishes", "Birds"];
+const CATEGORIES = [
+  "Food",
+  "Homes & Beds",
+  "Toys & Entertainment",
+  "Health & Medicine",
+  "Accessories",
+  "Grooming",
+];
+
+/* ==========================
+   2) Helpers
+   - getNextProductId
+   - fileOrUrlToPreview
+   ========================== */
+function getNextProductId(products) {
+  const maxNum = products.reduce((max, p) => {
+    const n = parseInt(p.id.replace(/\D/g, ""), 10);
+    return Number.isFinite(n) && n > max ? n : max;
+  }, 0);
+  return `P${String(maxNum + 1).padStart(3, "0")}`;
+}
+function fileOrUrlToPreview(v) {
+  if (!v) return "";
+  if (typeof v === "string") return v;
+  try {
+    return URL.createObjectURL(v); // File -> blob preview
+  } catch {
+    return "";
+  }
+}
+
+/* ==========================
+   3) UI Utilities
+   - Toast: small dismissible toast
+   - RichBar: toolbar to wrap selection with ** **
+   ========================== */
+function Toast({ text, onClose }) {
+  if (!text) return null;
+  return (
+    <div className="fixed top-4 right-4 bg-black/80 text-white px-4 py-2 rounded-lg shadow z-[100] flex items-center gap-3">
+      <span>{text}</span>
+      <button
+        onClick={onClose}
+        className="px-2 py-0.5 rounded bg-white/10 hover:bg-white/20"
+      >
+        ✕
+      </button>
+    </div>
+  );
+}
+
+function RichBar({ textareaRef }) {
+  const applyBold = () => {
+    const ta = textareaRef.current;
+    if (!ta) return;
+    const start = ta.selectionStart ?? 0;
+    const end = ta.selectionEnd ?? 0;
+    const before = ta.value.slice(0, start);
+    const sel = ta.value.slice(start, end) || "text";
+    const after = ta.value.slice(end);
+    const next = `${before}**${sel}**${after}`;
+    ta.value = next;
+    ta.dispatchEvent(new Event("input", { bubbles: true }));
+    const pos = start + 2 + sel.length + 2;
+    requestAnimationFrame(() => {
+      ta.focus();
+      ta.setSelectionRange(pos, pos);
+    });
+  };
+
+  return (
+    <div className="flex items-center gap-2 text-sm">
+      <button
+        type="button"
+        onClick={applyBold}
+        className="px-2 py-1 rounded border hover:bg-gray-50 font-bold"
+        title="Bold"
+      >
+        B
+      </button>
+    </div>
+  );
+}
+
+/* ==========================
+   4) Main Component
+   - ProductsSection: top-level state and product list, search, filters,
+     suggestions, product detail modal, and launching Add/Edit/Remove modals
+   ========================== */
+export default function ProductsSection() {
+  const [products, setProducts] = useState(MOCK_PRODUCTS);
+  const [mode, setMode] = useState(null); // add | edit | remove
+  const [selected, setSelected] = useState(null);
+  const [query, setQuery] = useState("");
+  const [searchInput, setSearchInput] = useState(""); // raw search input
+  const [petType, setPetType] = useState("all");
+  const [category, setCategory] = useState("all");
+  const [visible, setVisible] = useState(10);
+  const [toast, setToast] = useState("");
+  const [previewImg, setPreviewImg] = useState(null); // for full image popup
+
+  // compute results only after pressing enter/search
+  const filtered = useMemo(() => {
+    return products.filter((p) => {
+      const q = query.trim().toLowerCase();
+      if (q && p.id.toLowerCase() !== q && !p.name.toLowerCase().includes(q))
+        return false;
+      if (petType !== "all" && p.petType !== petType) return false;
+      if (category !== "all" && p.category !== category) return false;
+      return true;
+    });
+  }, [products, query, petType, category]);
+
+  /** Suggestions list */
+  const suggestions = useMemo(() => {
+    const q = searchInput.trim().toLowerCase();
+    if (!q) return [];
+    return products
+      .filter((p) =>
+        p.id.toLowerCase().includes(q) || p.name.toLowerCase().includes(q)
+      )
+      .slice(0, 5)
+      .map((p) => ({ id: p.id, name: p.name }));
+  }, [searchInput, products]);
+
+  /** Handlers */
+  const handleAdd = (prod) => {
+    const newId = getNextProductId(products);
+    setProducts([
+      ...products,
+      {
+        ...prod,
+        id: newId,
+        addedDate: new Date().toISOString().slice(0, 10),
+        banner:
+          typeof prod.banner === "string"
+            ? prod.banner
+            : fileOrUrlToPreview(prod.banner),
+        images: (prod.images || []).map((im) =>
+          typeof im === "string" ? im : fileOrUrlToPreview(im)
+        ),
+      },
+    ]);
+    setMode(null);
+    setToast(`Product added successfully with Product ID: ${newId}`);
+  };
+
+  const handleUpdate = (prod) => {
+    const normalized = {
+      ...prod,
+      banner:
+        typeof prod.banner === "string"
+          ? prod.banner
+          : fileOrUrlToPreview(prod.banner),
+      images: (prod.images || []).map((im) =>
+        typeof im === "string" ? im : fileOrUrlToPreview(im)
+      ),
+    };
+    setProducts(products.map((p) => (p.id === normalized.id ? normalized : p)));
+    setMode(null);
+    setToast("Changes saved successfully");
+  };
+
+  const handleRemove = (id) => {
+    setProducts(products.filter((p) => p.id !== id));
+    setMode(null);
+    setToast(`Product ${id} removed successfully`);
+  };
+
+  const handleSearch = () => {
+    setQuery(searchInput.trim());
+  };
+
+  const handleKeyDown = (e) => {
+    if (e.key === "Enter") {
+      handleSearch();
+    }
+  };
+
+  return (
+    <div className="p-4 space-y-4">
+      <Toast text={toast} onClose={() => setToast("")} />
+
+      {/* Top Menu */}
+      <div className="flex gap-2 flex-wrap">
+        <button
+          onClick={() => setMode("add")}
+          className="px-4 py-2 rounded-xl bg-orange-500 hover:bg-orange-600 text-white"
+        >
+          Add Product
+        </button>
+        <button
+          onClick={() => setMode("edit")}
+          className="px-4 py-2 rounded-xl bg-blue-500 hover:bg-blue-600 text-white"
+        >
+          Edit Product
+        </button>
+        <button
+          onClick={() => setMode("remove")}
+          className="px-4 py-2 rounded-xl bg-red-500 hover:bg-red-600 text-white"
+        >
+          Remove Product
+        </button>
+      </div>
+
+      {/* Search & Filters */}
+      <div className="flex flex-col gap-2 relative">
+        <div className="flex gap-2 items-stretch">
+          <input
+            type="text"
+            placeholder="Search by Product Name or ID"
+            className="flex-1 px-3 py-2 rounded-xl border"
+            value={searchInput}
+            onChange={(e) => setSearchInput(e.target.value)}
+            onKeyDown={handleKeyDown}
+          />
+          <button
+            onClick={handleSearch}
+            className="px-4 py-2 rounded-xl bg-orange-500 text-white"
+          >
+            Search
+          </button>
+        </div>
+
+        {/* Suggestions dropdown */}
+        {suggestions.length > 0 && (
+          <ul className="absolute top-12 left-0 w-full bg-white border rounded-xl shadow-lg z-20 max-h-40 overflow-y-auto">
+            {suggestions.map((s) => (
+              <li
+                key={s.id}
+                onMouseDown={() => {
+                  setSearchInput(s.id);
+                  const inputEl = document.activeElement;
+                  if (inputEl) setTimeout(() => inputEl.focus(), 0);
+                }}
+                className="px-3 py-2 hover:bg-orange-100 cursor-pointer text-sm"
+              >
+                {s.id} — {s.name}
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+
+      <div className="flex gap-4 flex-wrap">
+        <select
+          value={petType}
+          onChange={(e) => setPetType(e.target.value)}
+          className="px-3 py-2 border rounded-xl"
+        >
+          <option value="all">All Pets</option>
+          {PET_TYPES.map((pt) => (
+            <option key={pt} value={pt}>
+              {pt}
+            </option>
+          ))}
+        </select>
+        <select
+          value={category}
+          onChange={(e) => setCategory(e.target.value)}
+          className="px-3 py-2 border rounded-xl"
+        >
+          <option value="all">All Categories</option>
+          {CATEGORIES.map((c) => (
+            <option key={c} value={c}>
+              {c}
+            </option>
+          ))}
+        </select>
+      </div>
+      {/* Product List */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 overflow-y-auto max-h-[60vh]">
+        {filtered.slice(0, visible).map((p) => (
+          <div
+            key={p.id}
+            onClick={() => setSelected(p)}
+            className="cursor-pointer p-4 rounded-xl border bg-white shadow hover:bg-gray-50"
+          >
+            <img
+              src={fileOrUrlToPreview(p.banner)}
+              alt={p.name}
+              className="w-full h-32 object-cover rounded-lg mb-2"
+            />
+            <div className="font-semibold">{p.name}</div>
+            <div className="text-sm text-gray-500">ID: {p.id}</div>
+            <div className="text-xs text-gray-400">Added: {p.addedDate}</div>
+          </div>
+        ))}
+      </div>
+      {visible < filtered.length && (
+        <div className="text-center pt-2">
+          <button
+            onClick={() => setVisible((c) => c + 10)}
+            className="text-sm text-orange-600 hover:underline"
+          >
+            Load More
+          </button>
+        </div>
+      )}
+
+      {/* Product Detail Modal */}
+      {selected && (
+        <div className="fixed inset-0 flex items-center justify-center bg-black/40 z-50">
+          <div className="bg-white rounded-2xl p-6 w-full max-w-2xl shadow-lg space-y-4 max-h-[90vh] overflow-y-auto">
+            <h2 className="text-lg font-semibold">{selected.name}</h2>
+            <p>
+              <b>Brand:</b> {selected.brand}
+            </p>
+            <p>
+              <b>Price:</b> ₹{selected.price} ({selected.discount}% off)
+            </p>
+            <p>
+              <b>Stock Left:</b> {selected.stock}
+            </p>
+            <p>
+              <b>Pet Type:</b> {selected.petType} &nbsp; | &nbsp;{" "}
+              <b>Category:</b> {selected.category}
+            </p>
+            <p>
+              <b>Short Desc:</b> {selected.shortDesc}
+            </p>
+            <div className="text-sm bg-gray-100 p-2 rounded whitespace-pre-wrap">
+              {/* Render bold syntax */}
+              <span
+                dangerouslySetInnerHTML={{
+                  __html: selected.detailedDesc.replace(/\*\*(.*?)\*\*/g, "<b>$1</b>"),
+                }}
+              />
+            </div>
+            <div>
+              <b>Banner Image:</b>
+              <img
+                src={fileOrUrlToPreview(selected.banner)}
+                alt=""
+                onClick={() => setPreviewImg(fileOrUrlToPreview(selected.banner))}
+                className="w-full h-48 object-cover rounded mt-2 cursor-pointer hover:opacity-90"
+              />
+            </div>
+            <div>
+              <b>All Images:</b>
+              <div className="flex flex-wrap gap-2 mt-2">
+                {selected.images.map((img, idx) => (
+                  <img
+                    key={idx}
+                    src={fileOrUrlToPreview(img)}
+                    alt=""
+                    onClick={() => setPreviewImg(fileOrUrlToPreview(img))}
+                    className="w-20 h-20 object-cover rounded cursor-pointer hover:opacity-90"
+                  />
+                ))}
+              </div>
+            </div>
+            <div className="flex justify-end">
+              <button
+                onClick={() => setSelected(null)}
+                className="px-4 py-2 rounded-xl bg-gray-200"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Full Image Popup */}
+      {previewImg && (
+        <div className="fixed inset-0 flex items-center justify-center bg-black/70 z-[60]">
+          <div className="relative">
+            <img
+              src={previewImg}
+              alt="Preview"
+              className="max-h-[80vh] max-w-[90vw] rounded-lg shadow-lg"
+            />
+            <button
+              onClick={() => setPreviewImg(null)}
+              className="absolute -top-3 -right-3 bg-red-600 text-white rounded-full px-2 py-1 shadow"
+            >
+              ✕
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Add/Edit/Remove Modals (scrollable popups) */}
+      {mode === "add" && (
+        <CenteredModal onClose={() => setMode(null)}>
+          <AddForm onSave={handleAdd} onCancel={() => setMode(null)} />
+        </CenteredModal>
+      )}
+      {mode === "edit" && (
+        <CenteredModal onClose={() => setMode(null)}>
+          <EditForm
+            products={products}
+            onSave={handleUpdate}
+            onCancel={() => setMode(null)}
+          />
+        </CenteredModal>
+      )}
+      {mode === "remove" && (
+        <CenteredModal onClose={() => setMode(null)}>
+          <RemoveForm
+            products={products}
+            onRemove={handleRemove}
+            onCancel={() => setMode(null)}
+          />
+        </CenteredModal>
+      )}
+    </div>
+  );
+}
+
+/* ==========================
+   5) Modal Shell
+   - CenteredModal: generic modal wrapper used by Add/Edit/Remove
+   ========================== */
+function CenteredModal({ children, onClose }) {
+  return (
+    <div className="fixed inset-0 flex items-center justify-center bg-black/40 z-50">
+      <div className="bg-white rounded-2xl w-full max-w-3xl shadow-lg">
+        <div className="flex items-center justify-between px-6 py-4 border-b">
+          <h3 className="font-semibold">Products</h3>
+          <button
+            onClick={onClose}
+            className="px-2 py-0.5 rounded hover:bg-gray-100"
+          >
+            ✕
+          </button>
+        </div>
+        <div className="px-6 py-4 max-h-[85vh] overflow-y-auto">{children}</div>
+      </div>
+    </div>
+  );
+}
+
+/* ==========================
+   6) Sub-Forms
+   - AddForm: create new product
+   - EditForm: load product by ID and edit
+   - RemoveForm: search & remove
+   ========================== */
+function AddForm({ onSave, onCancel }) {
+  const [form, setForm] = useState({
+    name: "",
+    brand: "",
+    price: "",
+    discount: "",
+    shortDesc: "",
+    detailedDesc: "",
+    stock: "",
+    banner: "",
+    images: [],
+    petType: "Dogs",
+    category: "Food",
+  });
+  const [previewImg, setPreviewImg] = useState(null);
+  const detailedRef = useRef(null);
+
+  const addBannerFromFile = (e) => {
+    const f = e.target.files?.[0];
+    if (!f) return;
+    setForm((prev) => ({ ...prev, banner: f }));
+  };
+
+  const addImagesFromFiles = (e) => {
+    const files = Array.from(e.target.files || []);
+    if (!files.length) return;
+    setForm((prev) => ({ ...prev, images: [...prev.images, ...files] }));
+  };
+  const removeImageAt = (idx) =>
+    setForm((prev) => ({
+      ...prev,
+      images: prev.images.filter((_, i) => i !== idx),
+    }));
+
+  return (
+    <>
+      <h2 className="text-lg font-semibold mb-2">Add Product</h2>
+
+      {/* Basics */}
+      <div className="grid md:grid-cols-2 gap-3">
+        <input
+          className="w-full px-3 py-2 border rounded-xl"
+          placeholder="Product Name"
+          value={form.name}
+          onChange={(e) => setForm({ ...form, name: e.target.value })}
+        />
+        <input
+          className="w-full px-3 py-2 border rounded-xl"
+          placeholder="Brand"
+          value={form.brand}
+          onChange={(e) => setForm({ ...form, brand: e.target.value })}
+        />
+        <input
+          type="number"
+          className="w-full px-3 py-2 border rounded-xl"
+          placeholder="Price"
+          value={form.price}
+          onChange={(e) => setForm({ ...form, price: e.target.value })}
+        />
+        <input
+          type="number"
+          className="w-full px-3 py-2 border rounded-xl"
+          placeholder="Discount %"
+          value={form.discount}
+          onChange={(e) => setForm({ ...form, discount: e.target.value })}
+        />
+      </div>
+
+      <textarea
+        className="w-full px-3 py-2 border rounded-xl mt-3"
+        placeholder="Short Description"
+        value={form.shortDesc}
+        onChange={(e) => setForm({ ...form, shortDesc: e.target.value })}
+      />
+
+      <div className="mt-3 space-y-2">
+        <RichBar textareaRef={detailedRef} />
+        <textarea
+          ref={detailedRef}
+          className="w-full px-3 py-2 border rounded-xl"
+          placeholder="Detailed Description (supports **bold**)"
+          value={form.detailedDesc}
+          onChange={(e) => setForm({ ...form, detailedDesc: e.target.value })}
+          rows={6}
+        />
+      </div>
+
+      <div className="grid md:grid-cols-3 gap-3 mt-3">
+        <input
+          type="number"
+          className="w-full px-3 py-2 border rounded-xl"
+          placeholder="Stock Left"
+          value={form.stock}
+          onChange={(e) => setForm({ ...form, stock: e.target.value })}
+        />
+        <select
+          className="w-full px-3 py-2 border rounded-xl"
+          value={form.petType}
+          onChange={(e) => setForm({ ...form, petType: e.target.value })}
+        >
+          {PET_TYPES.map((pt) => (
+            <option key={pt}>{pt}</option>
+          ))}
+        </select>
+        <select
+          className="w-full px-3 py-2 border rounded-xl"
+          value={form.category}
+          onChange={(e) => setForm({ ...form, category: e.target.value })}
+        >
+          {CATEGORIES.map((c) => (
+            <option key={c}>{c}</option>
+          ))}
+        </select>
+      </div>
+
+      {/* Banner */}
+      <div className="mt-4">
+        <div className="flex items-center justify-between">
+          <b>Banner Image (1 only)</b>
+          {!form.banner && (
+            <label className="px-3 py-1 bg-orange-500 text-white rounded cursor-pointer">
+              + Upload
+              <input
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={addBannerFromFile}
+              />
+            </label>
+          )}
+        </div>
+        {form.banner && (
+          <div className="relative mt-2">
+            <img
+              src={fileOrUrlToPreview(form.banner)}
+              alt=""
+              onClick={() => setPreviewImg(fileOrUrlToPreview(form.banner))}
+              className="w-full h-40 object-cover rounded cursor-pointer"
+            />
+            <button
+              onClick={() => setForm({ ...form, banner: "" })}
+              className="absolute top-1 right-1 bg-red-500 text-white px-2 py-1 rounded"
+            >
+              X
+            </button>
+          </div>
+        )}
+      </div>
+
+      {/* Additional Images */}
+      <div className="mt-4">
+        <div className="flex items-center justify-between">
+          <b>Additional Images</b>
+          <label className="px-3 py-1 bg-orange-500 text-white rounded cursor-pointer">
+            + Upload
+            <input
+              type="file"
+              accept="image/*"
+              className="hidden"
+              multiple
+              onChange={addImagesFromFiles}
+            />
+          </label>
+        </div>
+        <div className="flex flex-wrap gap-2 mt-2">
+          {form.images.map((img, i) => (
+            <div key={i} className="relative">
+              <img
+                src={fileOrUrlToPreview(img)}
+                className="w-20 h-20 object-cover rounded cursor-pointer"
+                alt=""
+                onClick={() => setPreviewImg(fileOrUrlToPreview(img))}
+              />
+              <button
+                onClick={() => removeImageAt(i)}
+                className="absolute top-1 right-1 bg-red-500 text-white px-1 rounded"
+              >
+                X
+              </button>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Full Image Popup */}
+      {previewImg && (
+        <div className="fixed inset-0 flex items-center justify-center bg-black/70 z-[70]">
+          <div className="relative">
+            <img
+              src={previewImg}
+              alt="Preview"
+              className="max-h-[80vh] max-w-[90vw] rounded-lg shadow-lg"
+            />
+            <button
+              onClick={() => setPreviewImg(null)}
+              className="absolute -top-3 -right-3 bg-red-600 text-white rounded-full px-2 py-1 shadow"
+            >
+              ✕
+            </button>
+          </div>
+        </div>
+      )}
+
+      <div className="flex justify-end gap-2 mt-5">
+        <button onClick={onCancel} className="px-4 py-2 rounded-xl bg-gray-200">
+          Cancel
+        </button>
+        <button
+          onClick={() => onSave(form)}
+          className="px-4 py-2 rounded-xl bg-orange-500 text-white"
+        >
+          Add Product
+        </button>
+      </div>
+    </>
+  );
+}
+
+function EditForm({ products, onSave, onCancel }) {
+  const [pid, setPid] = useState("");
+  const [form, setForm] = useState(null);
+  const [previewImg, setPreviewImg] = useState(null);
+  const detailedRef = useRef(null);
+
+  // Suggestions by ID or name
+  const suggestions = useMemo(() => {
+    const q = pid.trim().toLowerCase();
+    if (!q) return [];
+    return products
+      .filter((p) => p.id.toLowerCase().includes(q) || p.name.toLowerCase().includes(q))
+      .slice(0, 5)
+      .map((p) => ({ id: p.id, name: p.name }));
+  }, [pid, products]);
+
+  const load = () => {
+    const prod = products.find(
+      (p) => p.id.toLowerCase() === pid.trim().toLowerCase()
+    );
+    if (prod) setForm({ ...prod });
+    else setForm(null);
+  };
+
+  const addBannerFromFile = (e) => {
+    const f = e.target.files?.[0];
+    if (!f) return;
+    setForm((prev) => ({ ...prev, banner: f }));
+  };
+
+  const addImagesFromFiles = (e) => {
+    const files = Array.from(e.target.files || []);
+    if (!files.length) return;
+    setForm((prev) => ({ ...prev, images: [...prev.images, ...files] }));
+  };
+  const removeImageAt = (idx) =>
+    setForm((prev) => ({
+      ...prev,
+      images: prev.images.filter((_, i) => i !== idx),
+    }));
+
+  return (
+    <>
+      {!form ? (
+        <div className="space-y-2">
+          <h2 className="text-lg font-semibold">Edit Product</h2>
+          <div className="relative">
+            <input
+              className="w-full px-3 py-2 border rounded-xl"
+              placeholder="Enter Product ID or Name"
+              value={pid}
+              onChange={(e) => setPid(e.target.value)}
+            />
+            {suggestions.length > 0 && (
+              <ul className="absolute z-10 bg-white border rounded-xl mt-1 w-full shadow-lg max-h-40 overflow-y-auto">
+                {suggestions.map((s) => (
+                  <li
+                    key={s.id}
+                    onMouseDown={() => setPid(s.id)}
+                    className="px-3 py-2 hover:bg-orange-100 cursor-pointer text-sm"
+                  >
+                    {s.id} — {s.name}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+          <div className="flex gap-2">
+            <button
+              onClick={load}
+              className="px-4 py-2 bg-blue-500 text-white rounded"
+            >
+              Load
+            </button>
+            <button onClick={onCancel} className="px-4 py-2 bg-gray-200 rounded">
+              Cancel
+            </button>
+          </div>
+        </div>
+      ) : (
+        <>
+          <h2 className="text-lg font-semibold mb-2">
+            Edit: {form.name} ({form.id})
+          </h2>
+
+          <div className="grid md:grid-cols-2 gap-3">
+            <input
+              className="w-full px-3 py-2 border rounded-xl"
+              value={form.name}
+              onChange={(e) => setForm({ ...form, name: e.target.value })}
+            />
+            <input
+              className="w-full px-3 py-2 border rounded-xl"
+              value={form.brand}
+              onChange={(e) => setForm({ ...form, brand: e.target.value })}
+            />
+            <input
+              type="number"
+              className="w-full px-3 py-2 border rounded-xl"
+              value={form.price}
+              onChange={(e) => setForm({ ...form, price: +e.target.value })}
+            />
+            <input
+              type="number"
+              className="w-full px-3 py-2 border rounded-xl"
+              value={form.discount}
+              onChange={(e) => setForm({ ...form, discount: +e.target.value })}
+            />
+          </div>
+
+          <textarea
+            className="w-full px-3 py-2 border rounded-xl mt-3"
+            value={form.shortDesc}
+            onChange={(e) => setForm({ ...form, shortDesc: e.target.value })}
+          />
+
+          <div className="mt-3 space-y-2">
+            <RichBar textareaRef={detailedRef} />
+            <textarea
+              ref={detailedRef}
+              className="w-full px-3 py-2 border rounded-xl"
+              value={form.detailedDesc}
+              onChange={(e) => setForm({ ...form, detailedDesc: e.target.value })}
+              rows={6}
+            />
+          </div>
+
+          <div className="grid md:grid-cols-3 gap-3 mt-3">
+            <input
+              type="number"
+              className="w-full px-3 py-2 border rounded-xl"
+              value={form.stock}
+              onChange={(e) => setForm({ ...form, stock: +e.target.value })}
+            />
+            <select
+              className="w-full px-3 py-2 border rounded-xl"
+              value={form.petType}
+              onChange={(e) => setForm({ ...form, petType: e.target.value })}
+            >
+              {PET_TYPES.map((pt) => (
+                <option key={pt}>{pt}</option>
+              ))}
+            </select>
+            <select
+              className="w-full px-3 py-2 border rounded-xl"
+              value={form.category}
+              onChange={(e) => setForm({ ...form, category: e.target.value })}
+            >
+              {CATEGORIES.map((c) => (
+                <option key={c}>{c}</option>
+              ))}
+            </select>
+          </div>
+
+          {/* Banner */}
+          <div className="mt-4">
+            <div className="flex items-center justify-between">
+              <b>Banner Image (1 only)</b>
+              <label className="px-3 py-1 bg-orange-500 text-white rounded cursor-pointer">
+                + Upload
+                <input
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={addBannerFromFile}
+                />
+              </label>
+            </div>
+            {form.banner && (
+              <div className="relative mt-2">
+                <img
+                  src={fileOrUrlToPreview(form.banner)}
+                  alt=""
+                  onClick={() => setPreviewImg(fileOrUrlToPreview(form.banner))}
+                  className="w-full h-40 object-cover rounded cursor-pointer"
+                />
+                <button
+                  onClick={() => setForm({ ...form, banner: "" })}
+                  className="absolute top-1 right-1 bg-red-500 text-white px-2 py-1 rounded"
+                >
+                  X
+                </button>
+              </div>
+            )}
+          </div>
+
+          {/* Additional Images */}
+          <div className="mt-4">
+            <div className="flex items-center justify-between">
+              <b>Additional Images</b>
+              <label className="px-3 py-1 bg-orange-500 text-white rounded cursor-pointer">
+                + Upload
+                <input
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  multiple
+                  onChange={addImagesFromFiles}
+                />
+              </label>
+            </div>
+            <div className="flex flex-wrap gap-2 mt-2">
+              {form.images.map((img, i) => (
+                <div key={i} className="relative">
+                  <img
+                    src={fileOrUrlToPreview(img)}
+                    className="w-20 h-20 object-cover rounded cursor-pointer"
+                    alt=""
+                    onClick={() => setPreviewImg(fileOrUrlToPreview(img))}
+                  />
+                  <button
+                    onClick={() => removeImageAt(i)}
+                    className="absolute top-1 right-1 bg-red-500 text-white px-1 rounded"
+                  >
+                    X
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Full Image Popup */}
+          {previewImg && (
+            <div className="fixed inset-0 flex items-center justify-center bg-black/70 z-[70]">
+              <div className="relative">
+                <img
+                  src={previewImg}
+                  alt="Preview"
+                  className="max-h-[80vh] max-w-[90vw] rounded-lg shadow-lg"
+                />
+                <button
+                  onClick={() => setPreviewImg(null)}
+                  className="absolute -top-3 -right-3 bg-red-600 text-white rounded-full px-2 py-1 shadow"
+                >
+                  ✕
+                </button>
+              </div>
+            </div>
+          )}
+
+          <div className="flex justify-end gap-2 mt-5">
+            <button
+              onClick={onCancel}
+              className="px-4 py-2 rounded-xl bg-gray-200"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={() => onSave(form)}
+              className="px-4 py-2 rounded-xl bg-blue-500 text-white"
+            >
+              Save Changes
+            </button>
+          </div>
+        </>
+      )}
+    </>
+  );
+}
+
+function RemoveForm({ products, onRemove, onCancel }) {
+  const [pid, setPid] = useState("");
+  const prod = products.find(
+    (p) =>
+      p.id.toLowerCase() === pid.trim().toLowerCase() ||
+      p.name.toLowerCase() === pid.trim().toLowerCase()
+  );
+
+  const suggestions = useMemo(() => {
+    const q = pid.trim().toLowerCase();
+    if (!q) return [];
+    return products
+      .filter((p) =>
+        p.id.toLowerCase().includes(q) || p.name.toLowerCase().includes(q)
+      )
+      .slice(0, 5)
+      .map((p) => ({ id: p.id, name: p.name }));
+  }, [pid, products]);
+
+  return (
+    <>
+      <h2 className="text-lg font-semibold">Remove Product</h2>
+      <div className="relative">
+        <input
+          className="w-full px-3 py-2 border rounded-xl mb-2"
+          placeholder="Enter Product ID or Name"
+          value={pid}
+          onChange={(e) => setPid(e.target.value)}
+        />
+        {suggestions.length > 0 && (
+          <ul className="absolute z-10 bg-white border rounded-xl mt-[-0.5rem] w-full shadow-lg max-h-40 overflow-y-auto">
+            {suggestions.map((s) => (
+              <li
+                key={s.id}
+                onMouseDown={() => setPid(s.id)}
+                className="px-3 py-2 hover:bg-orange-100 cursor-pointer text-sm"
+              >
+                {s.id} — {s.name}
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+
+      {prod && (
+        <div className="space-y-3">
+          <div className="p-3 border rounded-xl bg-gray-50">
+            <div className="font-semibold">{prod.name}</div>
+            <div className="text-sm text-gray-600">ID: {prod.id}</div>
+            <img
+              src={fileOrUrlToPreview(prod.banner)}
+              alt=""
+              className="w-full h-36 object-cover rounded mt-2"
+            />
+          </div>
+
+          <div className="p-3 border rounded-xl">
+            <p className="font-medium mb-2">
+              Are you sure you want to delete this product?
+            </p>
+            <div className="flex gap-2">
+              <button
+                onClick={() => onRemove(prod.id)}
+                className="px-4 py-2 bg-red-500 text-white rounded"
+              >
+                Yes, Remove
+              </button>
+              <button
+                onClick={onCancel}
+                className="px-4 py-2 bg-gray-200 rounded"
+              >
+                No, Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {!prod && (
+        <div className="text-sm text-gray-500">
+          Search by Product ID or Name to proceed.
+        </div>
+      )}
+    </>
+  );
+}

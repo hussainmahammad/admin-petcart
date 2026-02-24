@@ -1,0 +1,428 @@
+pipeline {
+  agent { label 'agent-b' }
+
+  environment {
+    AWS_REGION   = "us-east-1"
+    CLUSTER_NAME = "petcart-eks"
+    NAMESPACE    = "petcart"
+    ECR_REPO     = "petcart"
+
+    /* EC2 CloudWatch log groups (fixed) */
+    EC2_ACCESS_LOG_GROUP = "/petcart/nginx/access"
+    EC2_ERROR_LOG_GROUP  = "/petcart/nginx/error"
+  }
+
+  parameters {
+    choice(
+      name: 'DEPLOY_TARGET',
+      choices: ['ec2', 'eks-fargate', 'eks-ec2'],
+      description: 'Choose deployment target'
+    )
+  }
+
+  stages {
+
+    stage('Prepare') {
+      steps {
+        checkout scm
+      }
+    }
+
+    stage('Build') {
+      steps {
+        sh '''
+          chmod +x files/eks-fargate/scripts/*.sh || true
+          chmod +x files/eks-ec2/scripts/*.sh || true
+        '''
+      }
+    }
+
+    /* =======================
+       SETUP
+       ======================= */
+    stage('Setup') {
+      steps {
+        script {
+
+          /* ---------- EC2 ---------- */
+          if (params.DEPLOY_TARGET == 'ec2') {
+            withCredentials([
+              [$class: 'AmazonWebServicesCredentialsBinding',
+               credentialsId: 'account-c-aws']
+            ]) {
+              sh '''
+                set -e
+
+                echo "=============================="
+                echo "Building frontend"
+                echo "=============================="
+                cd app
+                npm install
+                chmod +x node_modules/.bin/vite
+                npm run build
+                cd ..
+              '''
+            }
+          }
+
+          /* ---------- EKS FARGATE ---------- */
+          if (params.DEPLOY_TARGET == 'eks-fargate') {
+            withCredentials([
+              [$class: 'AmazonWebServicesCredentialsBinding',
+               credentialsId: 'account-c-aws']
+            ]) {
+              sh '''
+                set -e
+
+                ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+
+                aws ecr describe-repositories --repository-names ${ECR_REPO} >/dev/null 2>&1 \
+                  || aws ecr create-repository --repository-name ${ECR_REPO}
+
+                aws ecr get-login-password --region ${AWS_REGION} \
+                  | docker login --username AWS --password-stdin \
+                    ${ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com
+
+                docker build -t ${ECR_REPO}:latest -f files/eks-fargate/docker/Dockerfile .
+                docker tag ${ECR_REPO}:latest \
+                  ${ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${ECR_REPO}:latest
+                docker push \
+                  ${ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${ECR_REPO}:latest
+
+                eksctl delete cluster --name ${CLUSTER_NAME} --region ${AWS_REGION} || true
+				echo "Waiting for cluster deletion to complete..."
+				while aws eks describe-cluster --name ${CLUSTER_NAME} --region ${AWS_REGION} >/dev/null 2>&1; do
+					echo "Cluster still deleting..."
+				sleep 30
+				done
+				
+				echo "Cluster deleted. Creating fresh cluster..."
+				
+				
+				eksctl create cluster -f files/eks-fargate/eksctl/cluster-fargate.yaml
+
+                aws eks update-kubeconfig \
+                  --region ${AWS_REGION} \
+                  --name ${CLUSTER_NAME}
+
+                bash files/eks-fargate/scripts/install-alb-controller.sh
+
+                kubectl wait \
+                  --namespace kube-system \
+                  --for=condition=Available deployment/aws-load-balancer-controller \
+                  --timeout=300s
+
+                kubectl apply -f files/eks-fargate/k8s/aws-observability-namespace.yaml
+                bash files/eks-fargate/scripts/attach-fargate-logging-policy.sh
+                kubectl apply -f files/eks-fargate/k8s/aws-logging-configmap.yaml
+              '''
+            }
+          }
+
+          /* ---------- EKS EC2 ---------- */
+          if (params.DEPLOY_TARGET == 'eks-ec2') {
+            withCredentials([
+              [$class: 'AmazonWebServicesCredentialsBinding',
+               credentialsId: 'account-c-aws']
+            ]) {
+              sh '''
+                set -e
+
+                ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+
+                aws ecr describe-repositories --repository-names ${ECR_REPO} >/dev/null 2>&1 \
+                  || aws ecr create-repository --repository-name ${ECR_REPO}
+
+                aws ecr get-login-password --region ${AWS_REGION} \
+                  | docker login --username AWS --password-stdin \
+                    ${ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com
+
+                docker build -t ${ECR_REPO}:latest -f files/eks-ec2/docker/Dockerfile .
+                docker tag ${ECR_REPO}:latest \
+                  ${ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${ECR_REPO}:latest
+                docker push \
+                  ${ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${ECR_REPO}:latest
+				  
+                eksctl delete cluster --name ${CLUSTER_NAME} --region ${AWS_REGION} || true
+				echo "Waiting for cluster deletion to complete..."
+				while aws eks describe-cluster --name ${CLUSTER_NAME} --region ${AWS_REGION} >/dev/null 2>&1; do
+					echo "Cluster still deleting..."
+				sleep 30
+				done
+				
+				echo "Cluster deleted. Creating fresh cluster..."
+
+                eksctl create cluster -f files/eks-ec2/eksctl/cluster-nodegroup.yaml
+
+                aws eks update-kubeconfig \
+                  --region ${AWS_REGION} \
+                  --name ${CLUSTER_NAME}
+
+                kubectl wait --for=condition=Ready nodes --all --timeout=10m
+
+                bash files/eks-ec2/scripts/install-alb-controller-ec2.sh
+
+                kubectl rollout status deployment/aws-load-balancer-controller \
+                  -n kube-system --timeout=10m
+
+                eksctl utils associate-iam-oidc-provider \
+                  --cluster ${CLUSTER_NAME} \
+                  --region ${AWS_REGION} \
+                  --approve
+
+                eksctl create iamserviceaccount \
+                  --cluster ${CLUSTER_NAME} \
+                  --region ${AWS_REGION} \
+                  --namespace amazon-cloudwatch \
+                  --name cloudwatch-agent \
+                  --attach-policy-arn arn:aws:iam::aws:policy/CloudWatchAgentServerPolicy \
+                  --approve \
+                  --override-existing-serviceaccounts
+
+                aws eks create-addon \
+                  --cluster-name ${CLUSTER_NAME} \
+                  --addon-name amazon-cloudwatch-observability \
+                  --region ${AWS_REGION} \
+                  || echo "CloudWatch add-on already installed"
+              '''
+            }
+          }
+
+        }
+      }
+    }
+
+    /* =======================
+       DEPLOY
+       ======================= */
+    stage('Deploy') {
+      steps {
+        script {
+
+          /* ---------- EC2 ---------- */
+          if (params.DEPLOY_TARGET == 'ec2') {
+            withCredentials([
+              [$class: 'AmazonWebServicesCredentialsBinding',
+               credentialsId: 'account-c-aws']
+            ]) {
+              sh '''
+                set -e
+
+                echo "=============================="
+                echo "Building Golden AMI with Packer"
+                echo "=============================="
+                cd files/ec2/packer
+                packer init .
+                packer build petcart-ami.pkr.hcl
+                cd ../../..
+
+                echo "=============================="
+                echo "Deploying infrastructure with Terraform"
+                echo "=============================="
+                cd files/ec2/terraform
+                terraform init
+                terraform apply -auto-approve
+              '''
+            }
+          }
+
+          /* ---------- EKS FARGATE ---------- */
+          if (params.DEPLOY_TARGET == 'eks-fargate') {
+            withCredentials([
+              [$class: 'AmazonWebServicesCredentialsBinding',
+               credentialsId: 'account-c-aws']
+            ]) {
+              sh '''
+                kubectl apply -f files/eks-fargate/k8s/namespace.yaml
+                kubectl apply -f files/eks-fargate/k8s/deployment.yaml
+                kubectl apply -f files/eks-fargate/k8s/service.yaml
+                kubectl apply -f files/eks-fargate/k8s/ingress.yaml
+              '''
+            }
+          }
+
+          /* ---------- EKS EC2 ---------- */
+          if (params.DEPLOY_TARGET == 'eks-ec2') {
+            withCredentials([
+              [$class: 'AmazonWebServicesCredentialsBinding',
+               credentialsId: 'account-c-aws']
+            ]) {
+              sh '''
+                kubectl apply -f files/eks-ec2/k8s/namespace.yaml
+                kubectl apply -f files/eks-ec2/k8s/deployment.yaml
+                kubectl apply -f files/eks-ec2/k8s/service.yaml
+                kubectl apply -f files/eks-ec2/k8s/ingress.yaml
+              '''
+            }
+          }
+
+        }
+      }
+    }
+
+    /* =======================
+       VALIDATE
+       ======================= */
+    stage('Validate') {
+      steps {
+        script {
+
+          /* ---------- EC2 ---------- */
+          if (params.DEPLOY_TARGET == 'ec2') {
+            withCredentials([
+              [$class: 'AmazonWebServicesCredentialsBinding',
+               credentialsId: 'account-c-aws']
+            ]) {
+              sh '''
+                set -e
+
+                echo "=============================="
+                echo "Fetching ALB URL"
+                echo "=============================="
+
+                cd files/ec2/terraform
+                ALB_URL=$(terraform output -raw alb_dns_name)
+
+                echo "ALB URL: http://${ALB_URL}"
+                echo "Waiting for HTTP 200..."
+
+                for i in {1..60}; do
+                  HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" http://${ALB_URL} || true)
+                  if [ "$HTTP_CODE" = "200" ]; then
+                    echo "🚀 EC2 Application is LIVE"
+
+                    ASG_NAME=$(terraform output -raw asg_name)
+
+                    echo "===OBS_START==="
+                    echo "OBS_RUNTIME=ec2"
+                    echo "OBS_ENDPOINT=http://${ALB_URL}"
+                    echo "OBS_LOG_GROUP_ACCESS=${EC2_ACCESS_LOG_GROUP}"
+                    echo "OBS_LOG_GROUP_ERROR=${EC2_ERROR_LOG_GROUP}"
+                    echo "OBS_METRICS_ENABLED=true"
+                    echo "OBS_METRICS_TYPE=ec2"
+                    echo "OBS_ASG=${ASG_NAME}"
+                    echo "OBS_CLUSTER=NA"
+                    echo "OBS_NAMESPACE=NA"
+                    echo "OBS_DEPLOYMENT=NA"
+                    echo "===OBS_END==="
+
+                    exit 0
+                  fi
+                  sleep 10
+                done
+
+                echo "ERROR: EC2 app did not return HTTP 200"
+                exit 1
+              '''
+            }
+          }
+
+          /* ---------- EKS FARGATE ---------- */
+          if (params.DEPLOY_TARGET == 'eks-fargate') {
+            withCredentials([
+              [$class: 'AmazonWebServicesCredentialsBinding',
+               credentialsId: 'account-c-aws']
+            ]) {
+              sh '''
+                echo "Waiting for ALB DNS (Fargate)..."
+                ALB_URL=""
+
+                for i in {1..60}; do
+                  ALB_URL=$(kubectl get ingress petcart-ingress -n ${NAMESPACE} \
+                    -o jsonpath='{.status.loadBalancer.ingress[0].hostname}' 2>/dev/null || true)
+                  [ -n "$ALB_URL" ] && break
+                  sleep 10
+                done
+
+                [ -z "$ALB_URL" ] && exit 1
+
+                for i in {1..60}; do
+                  HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" http://$ALB_URL || true)
+                  if [ "$HTTP_CODE" = "200" ]; then
+                    echo "🚀 EKS Fargate Application is LIVE"
+
+                    LOG_GROUP="/eks/petcart/nginx"
+
+                    echo "===OBS_START==="
+                    echo "OBS_RUNTIME=eks-fargate"
+                    echo "OBS_ENDPOINT=http://${ALB_URL}"
+                    echo "OBS_LOG_GROUP=${LOG_GROUP}"
+                    echo "OBS_METRICS_ENABLED=false"
+                    echo "OBS_METRICS_TYPE=NA"
+                    echo "OBS_CLUSTER=${CLUSTER_NAME}"
+                    echo "OBS_NAMESPACE=${NAMESPACE}"
+                    echo "OBS_DEPLOYMENT=petcart"
+                    echo "OBS_ASG=NA"
+                    echo "===OBS_END==="
+
+                    exit 0
+                  fi
+
+                  sleep 10
+                done
+
+                exit 1
+              '''
+            }
+          }
+
+          /* ---------- EKS EC2 ---------- */
+          if (params.DEPLOY_TARGET == 'eks-ec2') {
+            withCredentials([
+              [$class: 'AmazonWebServicesCredentialsBinding',
+               credentialsId: 'account-c-aws']
+            ]) {
+              sh '''
+                ALB_URL=""
+
+                for i in {1..60}; do
+                  ALB_URL=$(kubectl get ingress petcart-ingress -n ${NAMESPACE} \
+                    -o jsonpath='{.status.loadBalancer.ingress[0].hostname}' 2>/dev/null || true)
+                  [ -n "$ALB_URL" ] && break
+                  sleep 10
+                done
+
+                [ -z "$ALB_URL" ] && exit 1
+
+                for i in {1..60}; do
+                  HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" http://$ALB_URL || true)
+                  if [ "$HTTP_CODE" = "200" ]; then
+                    echo "🚀 EKS EC2 Application is LIVE"
+
+                    LOG_GROUP="/aws/containerinsights/${CLUSTER_NAME}/application"
+
+                    echo "===OBS_START==="
+                    echo "OBS_RUNTIME=eks-ec2"
+                    echo "OBS_ENDPOINT=http://${ALB_URL}"
+                    echo "OBS_LOG_GROUP=${LOG_GROUP}"
+                    echo "OBS_METRICS_ENABLED=true"
+                    echo "OBS_METRICS_TYPE=eks"
+                    echo "OBS_CLUSTER=${CLUSTER_NAME}"
+                    echo "OBS_NAMESPACE=${NAMESPACE}"
+                    echo "OBS_DEPLOYMENT=petcart"
+                    echo "OBS_ASG=NA"
+                    echo "===OBS_END==="
+
+                    exit 0
+                  fi
+
+                  sleep 10
+                done
+
+                exit 1
+              '''
+            }
+          }
+
+        }
+      }
+    }
+
+    stage('Complete') {
+      steps {
+        sh 'true'
+      }
+    }
+
+  }
+}
