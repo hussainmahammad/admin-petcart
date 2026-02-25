@@ -2,8 +2,8 @@
 # Scale OUT policy (+1 instance)
 # ----------------------------
 resource "aws_autoscaling_policy" "scale_out" {
-  name                   = "weblancehub-scale-out"
-  autoscaling_group_name = aws_autoscaling_group.weblancehub_asg.name
+  name                   = "admin-petcart-scale-out"
+  autoscaling_group_name = aws_autoscaling_group.admin_petcart_asg.name
   adjustment_type        = "ChangeInCapacity"
   scaling_adjustment     = 1
   cooldown               = 300
@@ -13,8 +13,8 @@ resource "aws_autoscaling_policy" "scale_out" {
 # Scale IN policy (-1 instance)
 # ----------------------------
 resource "aws_autoscaling_policy" "scale_in" {
-  name                   = "weblancehub-scale-in"
-  autoscaling_group_name = aws_autoscaling_group.weblancehub_asg.name
+  name                   = "admin-petcart-scale-in"
+  autoscaling_group_name = aws_autoscaling_group.admin_petcart_asg.name
   adjustment_type        = "ChangeInCapacity"
   scaling_adjustment     = -1
   cooldown               = 300
@@ -24,7 +24,7 @@ resource "aws_autoscaling_policy" "scale_in" {
 # CPU High Alarm (Scale OUT)
 # ----------------------------
 resource "aws_cloudwatch_metric_alarm" "cpu_high" {
-  alarm_name          = "weblancehub-cpu-high"
+  alarm_name          = "admin-petcart-cpu-high"
   comparison_operator = "GreaterThanThreshold"
   evaluation_periods  = 2
   threshold           = 70
@@ -35,7 +35,7 @@ resource "aws_cloudwatch_metric_alarm" "cpu_high" {
   period      = 60
 
   dimensions = {
-    AutoScalingGroupName = aws_autoscaling_group.weblancehub_asg.name
+    AutoScalingGroupName = aws_autoscaling_group.admin_petcart_asg.name
   }
 
   alarm_actions = [
@@ -47,7 +47,7 @@ resource "aws_cloudwatch_metric_alarm" "cpu_high" {
 # CPU Low Alarm (Scale IN)
 # ----------------------------
 resource "aws_cloudwatch_metric_alarm" "cpu_low" {
-  alarm_name          = "weblancehub-cpu-low"
+  alarm_name          = "admin-petcart-cpu-low"
   comparison_operator = "LessThanThreshold"
   evaluation_periods  = 2
   threshold           = 30
@@ -58,7 +58,7 @@ resource "aws_cloudwatch_metric_alarm" "cpu_low" {
   period      = 60
 
   dimensions = {
-    AutoScalingGroupName = aws_autoscaling_group.weblancehub_asg.name
+    AutoScalingGroupName = aws_autoscaling_group.admin_petcart_asg.name
   }
 
   alarm_actions = [
