@@ -18,10 +18,10 @@ variable "region" {
 
 variable "ami_name" {
   type    = string
-  default = "petcart-frontend-ami"
+  default = "admin-petcart-frontend-ami"
 }
 
-source "amazon-ebs" "petcart" {
+source "amazon-ebs" "admin_petcart" {
   region        = var.region
   instance_type = "t3.micro"
   ssh_username  = "ec2-user"
@@ -39,8 +39,8 @@ source "amazon-ebs" "petcart" {
 }
 
 build {
-  name    = "petcart-golden-ami"
-  sources = ["source.amazon-ebs.petcart"]
+  name    = "admin-petcart-golden-ami"
+  sources = ["source.amazon-ebs.admin_petcart"]
 
   # Copy frontend build into the temp EC2
   provisioner "file" {
