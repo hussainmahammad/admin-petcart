@@ -1,4 +1,4 @@
-- name: Configure PetCart frontend (AMI bake)
+- name: Configure Admin PetCart frontend (AMI bake)
   hosts: all
   become: yes
 
@@ -25,10 +25,10 @@
         path: /etc/nginx/conf.d/default.conf
         state: absent
 
-    - name: Copy PetCart nginx config
+    - name: Copy Admin PetCart nginx config
       copy:
         src: "../packer/nginx.conf"
-        dest: /etc/nginx/conf.d/petcart.conf
+        dest: /etc/nginx/conf.d/admin-petcart.conf
         owner: root
         group: root
         mode: "0644"
@@ -83,12 +83,12 @@
                   "collect_list": [
                     {
                       "file_path": "/var/log/nginx/access.log",
-                      "log_group_name": "/petcart/nginx/access",
+                      "log_group_name": "/admin-petcart/nginx/access",
                       "log_stream_name": "{instance_id}"
                     },
                     {
                       "file_path": "/var/log/nginx/error.log",
-                      "log_group_name": "/petcart/nginx/error",
+                      "log_group_name": "/admin-petcart/nginx/error",
                       "log_stream_name": "{instance_id}"
                     }
                   ]
