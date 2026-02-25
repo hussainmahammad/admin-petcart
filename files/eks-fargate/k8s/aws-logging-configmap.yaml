@@ -11,6 +11,6 @@ data:
         Name cloudwatch_logs
         Match kube.*
         region us-east-1
-        log_group_name /eks/petcart/nginx
+        log_group_name /eks/admin-petcart/nginx
         log_stream_prefix fargate-
         auto_create_group true
