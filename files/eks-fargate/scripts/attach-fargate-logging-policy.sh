@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e
 
-CLUSTER_NAME="petcart-eks"
+CLUSTER_NAME="admin-petcart-eks"
 REGION="us-east-1"
 
 ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
@@ -34,4 +34,3 @@ aws iam attach-role-policy \
   --policy-arn "$POLICY_ARN"
 
 echo "✅ CloudWatch logging policy attached to Fargate Pod Execution Role"
-
