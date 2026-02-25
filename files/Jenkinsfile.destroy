@@ -3,8 +3,8 @@ pipeline {
 
   environment {
     AWS_REGION   = "us-east-1"
-    CLUSTER_NAME = "petcart-eks"
-    NAMESPACE    = "petcart"
+    CLUSTER_NAME = "admin-petcart-eks"
+    NAMESPACE    = "admin-petcart"
   }
 
   parameters {
@@ -65,10 +65,10 @@ pipeline {
 
                 aws eks update-kubeconfig --region ${AWS_REGION} --name ${CLUSTER_NAME} || true
 
-                kubectl delete ingress petcart-ingress -n ${NAMESPACE} --ignore-not-found
+                kubectl delete ingress admin-petcart-ingress -n ${NAMESPACE} --ignore-not-found
                 sleep 60
-                kubectl delete svc petcart-service -n ${NAMESPACE} --ignore-not-found
-                kubectl delete deployment petcart-deployment -n ${NAMESPACE} --ignore-not-found
+                kubectl delete svc admin-petcart-service -n ${NAMESPACE} --ignore-not-found
+                kubectl delete deployment admin-petcart-deployment -n ${NAMESPACE} --ignore-not-found
                 kubectl delete ns ${NAMESPACE} --ignore-not-found
 
                 kubectl delete configmap aws-logging -n aws-observability --ignore-not-found
@@ -106,10 +106,10 @@ pipeline {
 
                 aws eks update-kubeconfig --region ${AWS_REGION} --name ${CLUSTER_NAME} || true
 
-                kubectl delete ingress petcart-ingress -n ${NAMESPACE} --ignore-not-found
+                kubectl delete ingress admin-petcart-ingress -n ${NAMESPACE} --ignore-not-found
                 sleep 60
-                kubectl delete svc petcart-service -n ${NAMESPACE} --ignore-not-found
-                kubectl delete deployment petcart-deployment -n ${NAMESPACE} --ignore-not-found
+                kubectl delete svc admin-petcart-service -n ${NAMESPACE} --ignore-not-found
+                kubectl delete deployment admin-petcart-deployment -n ${NAMESPACE} --ignore-not-found
                 kubectl delete ns ${NAMESPACE} --ignore-not-found
 
                 helm uninstall aws-load-balancer-controller -n kube-system || true
