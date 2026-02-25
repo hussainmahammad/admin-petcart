@@ -2,7 +2,7 @@
 set -e
 
 # ====== CONFIG ======
-CLUSTER_NAME=petcart-eks
+CLUSTER_NAME=admin-petcart-eks
 REGION=us-east-1
 POLICY_NAME=AWSLoadBalancerControllerIAMPolicy
 
@@ -56,4 +56,3 @@ helm install aws-load-balancer-controller eks/aws-load-balancer-controller \
   --set serviceAccount.name=aws-load-balancer-controller
 
 echo "✅ AWS Load Balancer Controller installation triggered"
-
