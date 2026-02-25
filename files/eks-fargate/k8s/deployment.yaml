@@ -1,20 +1,20 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: petcart-deployment
-  namespace: petcart
+  name: admin-petcart-deployment
+  namespace: admin-petcart
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: petcart
+      app: admin-petcart
   template:
     metadata:
       labels:
-        app: petcart
+        app: admin-petcart
     spec:
       containers:
-        - name: petcart
-          image: 867809929056.dkr.ecr.us-east-1.amazonaws.com/petcart:latest
+        - name: admin-petcart
+          image: 867809929056.dkr.ecr.us-east-1.amazonaws.com/admin-petcart:latest
           ports:
             - containerPort: 80
