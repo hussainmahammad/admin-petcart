@@ -2,7 +2,7 @@
 # Security Group for EC2
 # ----------------------------
 resource "aws_security_group" "ec2_sg" {
-  name        = "weblancehub-ec2-sg"
+  name        = "admin-petcart-ec2-sg"
   description = "Allow traffic from ALB only"
   vpc_id      = data.aws_vpc.default.id
 
@@ -28,7 +28,7 @@ resource "aws_security_group" "ec2_sg" {
   }
 
   tags = {
-    Name = "weblancehub-ec2-sg"
+    Name = "admin-petcart-ec2-sg"
   }
 }
 
@@ -36,7 +36,7 @@ resource "aws_security_group" "ec2_sg" {
 # IAM Role for EC2 (CloudWatch)
 # ----------------------------
 resource "aws_iam_role" "ec2_role" {
-  name = "weblancehub-ec2-role"
+  name = "admin-petcart-ec2-role"
 
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
@@ -54,29 +54,29 @@ resource "aws_iam_role_policy_attachment" "cw_attach" {
 }
 
 resource "aws_iam_instance_profile" "ec2_profile" {
-  name = "weblancehub-ec2-profile"
+  name = "admin-petcart-ec2-profile"
   role = aws_iam_role.ec2_role.name
 }
 
 # ----------------------------
 # Golden AMI lookup
 # ----------------------------
-data "aws_ami" "weblancehub_ami" {
+data "aws_ami" "admin_petcart_ami" {
   most_recent = true
   owners      = ["self"]
 
   filter {
     name   = "name"
-    values = ["weblancehub-frontend-ami-*"]
+    values = ["admin-petcart-frontend-ami-*"]
   }
 }
 
 # ----------------------------
 # Launch Template
 # ----------------------------
-resource "aws_launch_template" "weblancehub_lt" {
-  name_prefix   = "weblancehub-lt-"
-  image_id      = data.aws_ami.weblancehub_ami.id
+resource "aws_launch_template" "admin_petcart_lt" {
+  name_prefix   = "admin-petcart-lt-"
+  image_id      = data.aws_ami.admin_petcart_ami.id
   instance_type = "t3.micro"
 
   key_name = "hussaincloud" # optional, keep for emergency SSH
@@ -94,7 +94,7 @@ resource "aws_launch_template" "weblancehub_lt" {
     resource_type = "instance"
 
     tags = {
-      Name = "weblancehub-asg-instance"
+      Name = "admin-petcart-asg-instance"
     }
   }
 }
