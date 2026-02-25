@@ -10,7 +10,7 @@ variable "region" {
 variable "project_name" {
   description = "Project name prefix"
   type        = string
-  default     = "weblancehub"
+  default     = "admin-petcart"
 }
 
 # ----------------------------
