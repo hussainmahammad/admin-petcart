@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e
 
-CLUSTER_NAME=petcart-eks
+CLUSTER_NAME=admin-petcart-eks
 REGION=us-east-1
 POLICY_NAME=AWSLoadBalancerControllerIAMPolicyEC2
 
