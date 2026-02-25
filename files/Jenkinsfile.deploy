@@ -3,13 +3,13 @@ pipeline {
 
   environment {
     AWS_REGION   = "us-east-1"
-    CLUSTER_NAME = "petcart-eks"
-    NAMESPACE    = "petcart"
-    ECR_REPO     = "petcart"
+    CLUSTER_NAME = "admin-petcart-eks"
+    NAMESPACE    = "admin-petcart"
+    ECR_REPO     = "admin-petcart"
 
     /* EC2 CloudWatch log groups (fixed) */
-    EC2_ACCESS_LOG_GROUP = "/petcart/nginx/access"
-    EC2_ERROR_LOG_GROUP  = "/petcart/nginx/error"
+    EC2_ACCESS_LOG_GROUP = "/admin-petcart/nginx/access"
+    EC2_ERROR_LOG_GROUP  = "/admin-petcart/nginx/error"
   }
 
   parameters {
@@ -213,7 +213,7 @@ pipeline {
                 echo "=============================="
                 cd files/ec2/packer
                 packer init .
-                packer build petcart-ami.pkr.hcl
+                packer build petcart-admin-ami.pkr.hcl
                 cd ../../..
 
                 echo "=============================="
@@ -328,7 +328,7 @@ pipeline {
                 ALB_URL=""
 
                 for i in {1..60}; do
-                  ALB_URL=$(kubectl get ingress petcart-ingress -n ${NAMESPACE} \
+                  ALB_URL=$(kubectl get ingress admin-petcart-ingress -n ${NAMESPACE} \
                     -o jsonpath='{.status.loadBalancer.ingress[0].hostname}' 2>/dev/null || true)
                   [ -n "$ALB_URL" ] && break
                   sleep 10
@@ -341,7 +341,7 @@ pipeline {
                   if [ "$HTTP_CODE" = "200" ]; then
                     echo "🚀 EKS Fargate Application is LIVE"
 
-                    LOG_GROUP="/eks/petcart/nginx"
+                    LOG_GROUP="/eks/admin-petcart/nginx"
 
                     echo "===OBS_START==="
                     echo "OBS_RUNTIME=eks-fargate"
@@ -351,7 +351,7 @@ pipeline {
                     echo "OBS_METRICS_TYPE=NA"
                     echo "OBS_CLUSTER=${CLUSTER_NAME}"
                     echo "OBS_NAMESPACE=${NAMESPACE}"
-                    echo "OBS_DEPLOYMENT=petcart"
+                    echo "OBS_DEPLOYMENT=admin-petcart"
                     echo "OBS_ASG=NA"
                     echo "===OBS_END==="
 
@@ -376,7 +376,7 @@ pipeline {
                 ALB_URL=""
 
                 for i in {1..60}; do
-                  ALB_URL=$(kubectl get ingress petcart-ingress -n ${NAMESPACE} \
+                  ALB_URL=$(kubectl get ingress admin-petcart-ingress -n ${NAMESPACE} \
                     -o jsonpath='{.status.loadBalancer.ingress[0].hostname}' 2>/dev/null || true)
                   [ -n "$ALB_URL" ] && break
                   sleep 10
@@ -399,7 +399,7 @@ pipeline {
                     echo "OBS_METRICS_TYPE=eks"
                     echo "OBS_CLUSTER=${CLUSTER_NAME}"
                     echo "OBS_NAMESPACE=${NAMESPACE}"
-                    echo "OBS_DEPLOYMENT=petcart"
+                    echo "OBS_DEPLOYMENT=admin-petcart"
                     echo "OBS_ASG=NA"
                     echo "===OBS_END==="
 
