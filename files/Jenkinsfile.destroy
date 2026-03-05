@@ -1,223 +1,258 @@
 pipeline {
-  agent { label 'agent-b' }
+agent { label 'agent-b' }
 
-  environment {
-    AWS_REGION   = "us-east-1"
-    CLUSTER_NAME = "admin-petcart-eks"
-    NAMESPACE    = "admin-petcart"
+environment {
+AWS_REGION   = "us-east-1"
+CLUSTER_NAME = "admin-petcart-eks"
+NAMESPACE    = "admin-petcart"
+}
+
+parameters {
+choice(
+name: 'DESTROY_TARGET',
+choices: ['ec2', 'eks-fargate', 'eks-ec2'],
+description: 'Choose what to destroy'
+)
+}
+
+stages {
+
+```
+/* =======================
+   COMPLETE
+   ======================= */
+stage('Complete') {
+  steps {
+    checkout scm
   }
+}
 
-  parameters {
-    choice(
-      name: 'DESTROY_TARGET',
-      choices: ['ec2', 'eks-fargate', 'eks-ec2'],
-      description: 'Choose what to destroy'
-    )
+/* =======================
+   VALIDATE
+   ======================= */
+stage('Validate') {
+  steps {
+    sh '''
+      echo "Destroy validate stage started..."
+      sleep 10
+      echo "Destroy validate stage completed."
+    '''
   }
+}
 
-  stages {
-
-    /* =======================
-       COMPLETE
-       ======================= */
-    stage('Complete') {
-      steps {
-        checkout scm
-      }
+/* =======================
+   DEPLOY (DESTROY LOGIC)
+   ======================= */
+stage('Deploy') {
+  when {
+    expression {
+      params.DESTROY_TARGET in ['ec2','eks-fargate','eks-ec2']
     }
+  }
+  steps {
+    script {
 
-    /* =======================
-       VALIDATE
-       ======================= */
-    stage('Validate') {
-      steps {
-        sh '''
-          echo "Destroy validate stage started..."
-          sleep 10
-          echo "Destroy validate stage completed."
-        '''
-      }
-    }
+      /* ---------- EKS FARGATE ---------- */
+      if (params.DESTROY_TARGET == 'eks-fargate') {
+        withCredentials([
+          [$class: 'AmazonWebServicesCredentialsBinding',
+           credentialsId: 'account-c-aws']
+        ]) {
+          sh '''
+            set -e
+            echo "Starting FULL Fargate destroy..."
 
-    /* =======================
-       DEPLOY (DESTROY LOGIC)
-       ======================= */
-    stage('Deploy') {
-      when {
-        expression {
-          params.DESTROY_TARGET in ['ec2','eks-fargate','eks-ec2']
+            ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+
+            aws eks update-kubeconfig --region ${AWS_REGION} --name ${CLUSTER_NAME} || true
+
+            echo "Deleting Kubernetes resources..."
+            kubectl delete ingress admin-petcart-ingress -n ${NAMESPACE} --ignore-not-found
+            kubectl delete svc admin-petcart-service -n ${NAMESPACE} --ignore-not-found
+            kubectl delete deployment admin-petcart-deployment -n ${NAMESPACE} --ignore-not-found
+            kubectl delete ns ${NAMESPACE} --ignore-not-found
+
+            echo "Waiting for ALB created by ingress to disappear..."
+            for i in {1..30}; do
+              ALB=$(aws elbv2 describe-load-balancers \
+                --query "LoadBalancers[?contains(LoadBalancerName,'k8s')].LoadBalancerName" \
+                --output text)
+
+              if [ -z "$ALB" ]; then
+                echo "ALB removed."
+                break
+              fi
+
+              echo "ALB still exists, waiting..."
+              sleep 20
+            done
+
+            kubectl delete configmap aws-logging -n aws-observability --ignore-not-found
+            kubectl delete ns aws-observability --ignore-not-found
+
+            helm uninstall aws-load-balancer-controller -n kube-system || true
+
+            eksctl delete iamserviceaccount \
+              --cluster ${CLUSTER_NAME} \
+              --region ${AWS_REGION} \
+              --namespace kube-system \
+              --name aws-load-balancer-controller || true
+
+            echo "Deleting EKS cluster..."
+            eksctl delete cluster --name ${CLUSTER_NAME} --region ${AWS_REGION} || true
+
+            aws iam delete-policy \
+              --policy-arn arn:aws:iam::$ACCOUNT_ID:policy/AWSLoadBalancerControllerIAMPolicy || true
+
+            echo "EKS Fargate FULL destroy completed."
+          '''
         }
       }
-      steps {
-        script {
 
-          /* ---------- EKS FARGATE ---------- */
-          if (params.DESTROY_TARGET == 'eks-fargate') {
-            withCredentials([
-              [$class: 'AmazonWebServicesCredentialsBinding',
-               credentialsId: 'account-c-aws']
-            ]) {
-              sh '''
-                set +e
-                echo "Starting FULL Fargate destroy..."
+      /* ---------- EKS EC2 ---------- */
+      if (params.DESTROY_TARGET == 'eks-ec2') {
+        withCredentials([
+          [$class: 'AmazonWebServicesCredentialsBinding',
+           credentialsId: 'account-c-aws']
+        ]) {
+          sh '''
+            set -e
+            echo "Starting FULL EC2 EKS destroy..."
 
-                ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+            ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
 
-                aws eks update-kubeconfig --region ${AWS_REGION} --name ${CLUSTER_NAME} || true
+            aws eks update-kubeconfig --region ${AWS_REGION} --name ${CLUSTER_NAME} || true
 
-                kubectl delete ingress admin-petcart-ingress -n ${NAMESPACE} --ignore-not-found
-                sleep 60
-                kubectl delete svc admin-petcart-service -n ${NAMESPACE} --ignore-not-found
-                kubectl delete deployment admin-petcart-deployment -n ${NAMESPACE} --ignore-not-found
-                kubectl delete ns ${NAMESPACE} --ignore-not-found
+            echo "Deleting Kubernetes resources..."
+            kubectl delete ingress admin-petcart-ingress -n ${NAMESPACE} --ignore-not-found
+            kubectl delete svc admin-petcart-service -n ${NAMESPACE} --ignore-not-found
+            kubectl delete deployment admin-petcart-deployment -n ${NAMESPACE} --ignore-not-found
+            kubectl delete ns ${NAMESPACE} --ignore-not-found
 
-                kubectl delete configmap aws-logging -n aws-observability --ignore-not-found
-                kubectl delete ns aws-observability --ignore-not-found
+            echo "Waiting for ALB to be deleted..."
+            for i in {1..30}; do
+              ALB=$(aws elbv2 describe-load-balancers \
+                --query "LoadBalancers[?contains(LoadBalancerName,'k8s')].LoadBalancerName" \
+                --output text)
 
-                helm uninstall aws-load-balancer-controller -n kube-system || true
+              if [ -z "$ALB" ]; then
+                echo "ALB removed."
+                break
+              fi
 
-                eksctl delete iamserviceaccount \
-                  --cluster ${CLUSTER_NAME} \
-                  --region ${AWS_REGION} \
-                  --namespace kube-system \
-                  --name aws-load-balancer-controller || true
+              echo "ALB still exists, waiting..."
+              sleep 20
+            done
 
-                eksctl delete cluster --name ${CLUSTER_NAME} --region ${AWS_REGION} || true
+            helm uninstall aws-load-balancer-controller -n kube-system || true
 
-                aws iam delete-policy \
-                  --policy-arn arn:aws:iam::$ACCOUNT_ID:policy/AWSLoadBalancerControllerIAMPolicy || true
+            eksctl delete iamserviceaccount \
+              --cluster ${CLUSTER_NAME} \
+              --region ${AWS_REGION} \
+              --namespace kube-system \
+              --name aws-load-balancer-controller || true
 
-                echo "EKS Fargate FULL destroy completed."
-              '''
-            }
-          }
+            aws eks delete-addon \
+              --cluster-name ${CLUSTER_NAME} \
+              --addon-name amazon-cloudwatch-observability \
+              --region ${AWS_REGION} || true
 
-          /* ---------- EKS EC2 ---------- */
-          if (params.DESTROY_TARGET == 'eks-ec2') {
-            withCredentials([
-              [$class: 'AmazonWebServicesCredentialsBinding',
-               credentialsId: 'account-c-aws']
-            ]) {
-              sh '''
-                set +e
-                echo "Starting FULL EC2 EKS destroy..."
+            eksctl delete iamserviceaccount \
+              --cluster ${CLUSTER_NAME} \
+              --region ${AWS_REGION} \
+              --namespace amazon-cloudwatch \
+              --name cloudwatch-agent || true
 
-                ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+            echo "Deleting EKS cluster..."
+            eksctl delete cluster --name ${CLUSTER_NAME} --region ${AWS_REGION} || true
 
-                aws eks update-kubeconfig --region ${AWS_REGION} --name ${CLUSTER_NAME} || true
-
-                kubectl delete ingress admin-petcart-ingress -n ${NAMESPACE} --ignore-not-found
-                sleep 60
-                kubectl delete svc admin-petcart-service -n ${NAMESPACE} --ignore-not-found
-                kubectl delete deployment admin-petcart-deployment -n ${NAMESPACE} --ignore-not-found
-                kubectl delete ns ${NAMESPACE} --ignore-not-found
-
-                helm uninstall aws-load-balancer-controller -n kube-system || true
-
-                eksctl delete iamserviceaccount \
-                  --cluster ${CLUSTER_NAME} \
-                  --region ${AWS_REGION} \
-                  --namespace kube-system \
-                  --name aws-load-balancer-controller || true
-
-                aws eks delete-addon \
-                  --cluster-name ${CLUSTER_NAME} \
-                  --addon-name amazon-cloudwatch-observability \
+            echo "Cleaning CloudWatch logs..."
+            aws logs describe-log-groups \
+              --log-group-name-prefix /aws/containerinsights/${CLUSTER_NAME} \
+              --region ${AWS_REGION} \
+              --query 'logGroups[].logGroupName' \
+              --output text | while read LOG_GROUP; do
+                aws logs delete-log-group \
+                  --log-group-name "$LOG_GROUP" \
                   --region ${AWS_REGION} || true
+              done
 
-                eksctl delete iamserviceaccount \
-                  --cluster ${CLUSTER_NAME} \
-                  --region ${AWS_REGION} \
-                  --namespace amazon-cloudwatch \
-                  --name cloudwatch-agent || true
+            aws iam delete-policy \
+              --policy-arn arn:aws:iam::$ACCOUNT_ID:policy/AWSLoadBalancerControllerIAMPolicyEC2 || true
 
-                eksctl delete cluster --name ${CLUSTER_NAME} --region ${AWS_REGION} || true
-
-                aws logs describe-log-groups \
-                  --log-group-name-prefix /aws/containerinsights/${CLUSTER_NAME} \
-                  --region ${AWS_REGION} \
-                  --query 'logGroups[].logGroupName' \
-                  --output text | while read LOG_GROUP; do
-                    aws logs delete-log-group \
-                      --log-group-name "$LOG_GROUP" \
-                      --region ${AWS_REGION} || true
-                  done
-
-                aws iam delete-policy \
-                  --policy-arn arn:aws:iam::$ACCOUNT_ID:policy/AWSLoadBalancerControllerIAMPolicyEC2 || true
-
-                echo "EKS EC2 FULL destroy completed."
-              '''
-            }
-          }
-
-          /* ---------- EC2 ASG ---------- */
-          if (params.DESTROY_TARGET == 'ec2') {
-            withCredentials([
-              [$class: 'AmazonWebServicesCredentialsBinding',
-               credentialsId: 'account-c-aws']
-            ]) {
-              sh '''
-                set +e
-
-                echo "=============================="
-                echo "Destroying EC2 infrastructure"
-                echo "=============================="
-
-                cd files/ec2/terraform
-
-                terraform init
-                terraform destroy -auto-approve
-
-                echo ""
-                echo "✅ EC2 infrastructure destroyed successfully"
-                echo "ℹ️ Golden AMIs are preserved"
-              '''
-            }
-          }
-
+            echo "EKS EC2 FULL destroy completed."
+          '''
         }
       }
-    }
 
-    /* =======================
-       SETUP
-       ======================= */
-    stage('Setup') {
-      steps {
-        sh '''
-          echo "Destroy setup stage started..."
-          sleep 10
-          echo "Destroy setup stage completed."
-        '''
+      /* ---------- EC2 ASG ---------- */
+      if (params.DESTROY_TARGET == 'ec2') {
+        withCredentials([
+          [$class: 'AmazonWebServicesCredentialsBinding',
+           credentialsId: 'account-c-aws']
+        ]) {
+          sh '''
+            set -e
+
+            echo "=============================="
+            echo "Destroying EC2 infrastructure"
+            echo "=============================="
+
+            cd files/ec2/terraform
+
+            terraform init
+            terraform destroy -auto-approve
+
+            echo ""
+            echo "✅ EC2 infrastructure destroyed successfully"
+            echo "ℹ️ Golden AMIs are preserved"
+          '''
+        }
       }
-    }
 
-    /* =======================
-       BUILD
-       ======================= */
-    stage('Build') {
-      steps {
-        sh '''
-          echo "Destroy build stage started..."
-          sleep 10
-          echo "Destroy build stage completed."
-        '''
-      }
     }
-
-    /* =======================
-       PREPARE
-       ======================= */
-    stage('Prepare') {
-      steps {
-        sh '''
-          echo "Destroy prepare stage started..."
-          sleep 10
-          echo "Destroy prepare stage completed."
-        '''
-      }
-    }
-
   }
+}
+
+/* =======================
+   SETUP
+   ======================= */
+stage('Setup') {
+  steps {
+    sh '''
+      echo "Destroy setup stage started..."
+      sleep 10
+      echo "Destroy setup stage completed."
+    '''
+  }
+}
+
+/* =======================
+   BUILD
+   ======================= */
+stage('Build') {
+  steps {
+    sh '''
+      echo "Destroy build stage started..."
+      sleep 10
+      echo "Destroy build stage completed."
+    '''
+  }
+}
+
+/* =======================
+   PREPARE
+   ======================= */
+stage('Prepare') {
+  steps {
+    sh '''
+      echo "Destroy prepare stage started..."
+      sleep 10
+      echo "Destroy prepare stage completed."
+    '''
+  }
+}
+```
+
+}
 }
