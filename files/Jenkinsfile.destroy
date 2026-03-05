@@ -17,19 +17,12 @@ description: 'Choose what to destroy'
 
 stages {
 
-```
-/* =======================
-   COMPLETE
-   ======================= */
 stage('Complete') {
   steps {
     checkout scm
   }
 }
 
-/* =======================
-   VALIDATE
-   ======================= */
 stage('Validate') {
   steps {
     sh '''
@@ -40,26 +33,27 @@ stage('Validate') {
   }
 }
 
-/* =======================
-   DEPLOY (DESTROY LOGIC)
-   ======================= */
 stage('Deploy') {
   when {
     expression {
       params.DESTROY_TARGET in ['ec2','eks-fargate','eks-ec2']
     }
   }
+
   steps {
     script {
 
-      /* ---------- EKS FARGATE ---------- */
+      /* ================= EKS FARGATE DESTROY ================= */
       if (params.DESTROY_TARGET == 'eks-fargate') {
+
         withCredentials([
           [$class: 'AmazonWebServicesCredentialsBinding',
            credentialsId: 'account-c-aws']
         ]) {
+
           sh '''
             set -e
+
             echo "Starting FULL Fargate destroy..."
 
             ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
@@ -67,23 +61,26 @@ stage('Deploy') {
             aws eks update-kubeconfig --region ${AWS_REGION} --name ${CLUSTER_NAME} || true
 
             echo "Deleting Kubernetes resources..."
+
             kubectl delete ingress admin-petcart-ingress -n ${NAMESPACE} --ignore-not-found
             kubectl delete svc admin-petcart-service -n ${NAMESPACE} --ignore-not-found
             kubectl delete deployment admin-petcart-deployment -n ${NAMESPACE} --ignore-not-found
             kubectl delete ns ${NAMESPACE} --ignore-not-found
 
-            echo "Waiting for ALB created by ingress to disappear..."
-            for i in {1..30}; do
+            echo "Waiting for AWS ALB created by ingress to disappear..."
+
+            for i in {1..30}
+            do
               ALB=$(aws elbv2 describe-load-balancers \
                 --query "LoadBalancers[?contains(LoadBalancerName,'k8s')].LoadBalancerName" \
                 --output text)
 
               if [ -z "$ALB" ]; then
-                echo "ALB removed."
+                echo "ALB deleted successfully."
                 break
               fi
 
-              echo "ALB still exists, waiting..."
+              echo "ALB still exists... waiting"
               sleep 20
             done
 
@@ -99,6 +96,7 @@ stage('Deploy') {
               --name aws-load-balancer-controller || true
 
             echo "Deleting EKS cluster..."
+
             eksctl delete cluster --name ${CLUSTER_NAME} --region ${AWS_REGION} || true
 
             aws iam delete-policy \
@@ -109,14 +107,17 @@ stage('Deploy') {
         }
       }
 
-      /* ---------- EKS EC2 ---------- */
+      /* ================= EKS EC2 DESTROY ================= */
       if (params.DESTROY_TARGET == 'eks-ec2') {
+
         withCredentials([
           [$class: 'AmazonWebServicesCredentialsBinding',
            credentialsId: 'account-c-aws']
         ]) {
+
           sh '''
             set -e
+
             echo "Starting FULL EC2 EKS destroy..."
 
             ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
@@ -124,23 +125,26 @@ stage('Deploy') {
             aws eks update-kubeconfig --region ${AWS_REGION} --name ${CLUSTER_NAME} || true
 
             echo "Deleting Kubernetes resources..."
+
             kubectl delete ingress admin-petcart-ingress -n ${NAMESPACE} --ignore-not-found
             kubectl delete svc admin-petcart-service -n ${NAMESPACE} --ignore-not-found
             kubectl delete deployment admin-petcart-deployment -n ${NAMESPACE} --ignore-not-found
             kubectl delete ns ${NAMESPACE} --ignore-not-found
 
-            echo "Waiting for ALB to be deleted..."
-            for i in {1..30}; do
+            echo "Waiting for ALB to disappear..."
+
+            for i in {1..30}
+            do
               ALB=$(aws elbv2 describe-load-balancers \
                 --query "LoadBalancers[?contains(LoadBalancerName,'k8s')].LoadBalancerName" \
                 --output text)
 
               if [ -z "$ALB" ]; then
-                echo "ALB removed."
+                echo "ALB deleted successfully."
                 break
               fi
 
-              echo "ALB still exists, waiting..."
+              echo "ALB still exists... waiting"
               sleep 20
             done
 
@@ -164,14 +168,17 @@ stage('Deploy') {
               --name cloudwatch-agent || true
 
             echo "Deleting EKS cluster..."
+
             eksctl delete cluster --name ${CLUSTER_NAME} --region ${AWS_REGION} || true
 
             echo "Cleaning CloudWatch logs..."
+
             aws logs describe-log-groups \
               --log-group-name-prefix /aws/containerinsights/${CLUSTER_NAME} \
               --region ${AWS_REGION} \
               --query 'logGroups[].logGroupName' \
-              --output text | while read LOG_GROUP; do
+              --output text | while read LOG_GROUP
+              do
                 aws logs delete-log-group \
                   --log-group-name "$LOG_GROUP" \
                   --region ${AWS_REGION} || true
@@ -185,27 +192,25 @@ stage('Deploy') {
         }
       }
 
-      /* ---------- EC2 ASG ---------- */
+      /* ================= EC2 DESTROY ================= */
       if (params.DESTROY_TARGET == 'ec2') {
+
         withCredentials([
           [$class: 'AmazonWebServicesCredentialsBinding',
            credentialsId: 'account-c-aws']
         ]) {
+
           sh '''
             set -e
 
-            echo "=============================="
-            echo "Destroying EC2 infrastructure"
-            echo "=============================="
+            echo "Destroying EC2 infrastructure..."
 
             cd files/ec2/terraform
 
             terraform init
             terraform destroy -auto-approve
 
-            echo ""
-            echo "✅ EC2 infrastructure destroyed successfully"
-            echo "ℹ️ Golden AMIs are preserved"
+            echo "EC2 infrastructure destroyed successfully."
           '''
         }
       }
@@ -214,9 +219,6 @@ stage('Deploy') {
   }
 }
 
-/* =======================
-   SETUP
-   ======================= */
 stage('Setup') {
   steps {
     sh '''
@@ -227,9 +229,6 @@ stage('Setup') {
   }
 }
 
-/* =======================
-   BUILD
-   ======================= */
 stage('Build') {
   steps {
     sh '''
@@ -240,9 +239,6 @@ stage('Build') {
   }
 }
 
-/* =======================
-   PREPARE
-   ======================= */
 stage('Prepare') {
   steps {
     sh '''
@@ -252,7 +248,6 @@ stage('Prepare') {
     '''
   }
 }
-```
 
 }
 }
