@@ -1,5 +1,3 @@
-<img width="1536" height="1024" alt="image" src="https://github.com/user-attachments/assets/8b9e1c2e-a377-4aca-81f5-4b09db2b87b4" /># Admin PetCart
-
 ## Project Overview
 
 Admin PetCart is the administrative dashboard for managing the PetCart Store platform.  
@@ -57,7 +55,7 @@ A serverless Kubernetes deployment where:
 
 ---
 
-<img width="1536" height="1024" alt="image" src="https://github.com/user-attachments/assets/09115221-7ff6-4407-a8b7-47d4f592891a" />
+<img width="1228" height="737" alt="image" src="https://github.com/user-attachments/assets/677f6c95-5882-4b46-8a38-68ad9ab8a651" />
 
 ---
 
