@@ -5,7 +5,7 @@ It allows administrators to manage products, monitor orders, update inventory, a
 
 The application is deployed using the same DevOps infrastructure and deployment strategy implemented in the **PetCart Store project**.
 
-This project demonstrates enterprise-level DevOps practices including:
+This project demonstrates :
 
 - Jenkins CI/CD automation
 - Infrastructure provisioning using Terraform
