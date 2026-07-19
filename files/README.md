@@ -1,4 +1,4 @@
-## Project Overview
+## Project Overview 
 
 Admin PetCart is the administrative dashboard for managing the PetCart Store platform.  
 It allows administrators to manage products, monitor orders, update inventory, and handle platform operations.
